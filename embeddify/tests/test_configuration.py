@@ -4,6 +4,10 @@ def test_generic_youtube():
     embedder = Embedder(width=200)
     assert embedder("https://www.youtube.com/watch?v=2wii8hfNkzE") == """<iframe width="200" height="113" src="https://www.youtube.com/embed/2wii8hfNkzE?feature=oembed" frameborder="0" allowfullscreen></iframe>"""
 
+    assert embedder("https://www.youtu.be/2wii8hfNkzE") == """<iframe width="200" height="113" src="https://www.youtube.com/embed/2wii8hfNkzE?feature=oembed" frameborder="0" allowfullscreen></iframe>"""
+
+    assert embedder("https://www.youtube.com/embed/2wii8hfNkzE") == """<iframe width="200" height="113" src="https://www.youtube.com/embed/2wii8hfNkzE?feature=oembed" frameborder="0" allowfullscreen></iframe>"""
+
 def test_generic_slideshare():
     embedder = Embedder(width=200)
     assert embedder("http://de.slideshare.net/mrtopf/open-government-vortrag-aachen").startswith("""<iframe src="https://www.slideshare.net/slideshow/embed_code/key/3wGhGoN6QUw5lR" """)

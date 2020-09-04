@@ -15,16 +15,18 @@ import cgi
 import copy
 import json
 import re
+
 import requests
 
 __all__ = ['Plugin', 'OEmbedPlugin', 'YouTube', 'Vimeo', 'Slideshare', 'Flickr', 'Embedder']
+
 
 class Plugin(object):
     """base plugin to be used for converting one type of link into an embed"""
 
     default = {
-        'width' : "560",
-        'height' : "315"
+        'width': "560",
+        'height': "315"
     }
 
     def get_config(self, config):
@@ -36,11 +38,13 @@ class Plugin(object):
         c.update(config)
         return c
 
-    def __call__(self, parts, config = {}):
+    def __call__(self, parts, config=None):
         """this method needs to be implemented by a plugin author and check the url parts
         for a match. If a match was detected, return the embed as string, if not return None
         so the next plugin will try to match
         """
+        if config is None:
+            config = {}
         return None
 
 
@@ -84,26 +88,28 @@ class OEmbedPlugin(Plugin):
     def do_request(self, parts, config):
         """run the request and return the data"""
         c = self.get_config(config)
-        if not self.test(parts): 
+        if not self.test(parts):
             return
         params = {
-            "maxwidth"  : c['width'],
-            "maxheight" : c['height'],
-            "format"    : 'json',
-            "url"       : urlparse.urlunparse(parts),
+            "maxwidth": c['width'],
+            "maxheight": c['height'],
+            "format": 'json',
+            "url": urlparse.urlunparse(parts),
         }
         if config.get("autoplay", False):
             params["autoplay"] = 1
         for k, v in c.get('params', {}).items():
             if k not in params:
                 params[k] = v
-        res = requests.get(self.api_url, params = params)
+        res = requests.get(self.api_url, params=params)
         if res.status_code != 200:
             return None
         return json.loads(res.text)
 
-    def __call__(self, parts, config = {}):
+    def __call__(self, parts, config=None):
         """call the oembed endpoint and return the result"""
+        if config is None:
+            config = {}
         data = self.do_request(parts, config)
         return get_markup_from_data(data)
 
@@ -120,6 +126,13 @@ class YouTube(OEmbedPlugin):
 
     def do_request(self, parts, config):
         """run the request and return the data"""
+
+        if self.test(parts=parts):
+            match = re.match("/embed/([a-z0-9A-Z]{11})", parts.path)
+            if match and len(match.groups()) == 1:
+                video_id = match.groups()[0]
+                parts = parts._replace(query="v=" + video_id, path="/watch")
+
         result = OEmbedPlugin.do_request(self, parts, config)
         # youtube doesn't support the autoplay parameter, so we have to handle
         # it manually
@@ -144,22 +157,24 @@ class Flickr(OEmbedPlugin):
         """test if the plugin is able to convert that link"""
         return "flickr.com" in parts.netloc
 
-    def __call__(self, parts, config = {}):
+    def __call__(self, parts, config=None):
         """special case for flickr so that we can avoid the iframe which html produces"""
 
+        if config is None:
+            config = {}
         data = self.do_request(parts, config)
         if data is None:
             return None
         otype = data.get("type", None)
         if otype != "photo":
-            return None # no photo, nothing to do here
+            return None  # no photo, nothing to do here
 
         new_data = {
-            'url' : data['web_page'],
-            'src' : data['url'],
-            'title' : cgi.escape(data['title']),
-            'width' : data['width'],
-            'height' : data['height'],
+            'url': data['web_page'],
+            'src': data['url'],
+            'title': cgi.escape(data['title']),
+            'width': data['width'],
+            'height': data['height'],
         }
 
         fmt = """<a target="flickr" href="%(url)s"><img src="%(src)s" class="flickr-embed-img" alt="%(title)s" width="%(width)s" height="%(height)s"></a>"""
@@ -175,6 +190,7 @@ class Vimeo(OEmbedPlugin):
     def test(self, parts):
         """test if the plugin is able to convert that link"""
         return "vimeo.com" in parts.netloc
+
 
 class Slideshare(OEmbedPlugin):
     """converts slideshare links into embeds
@@ -212,7 +228,7 @@ class Embedder(object):
 
     OEmbedMarkup = OEmbedMarkup
 
-    def __init__(self, plugins = STANDARD_PLUGINS, plugin_config = {}, config = {}, **kw):
+    def __init__(self, plugins=None, plugin_config=None, config=None, **kw):
         """initialize the Embedder class with a list of plugins to be used and optional configuration
 
         :param plugins: list of plugins to be used by the embedding mechanism
@@ -224,6 +240,12 @@ class Embedder(object):
         :param **kw: keyword arguments being added to the ``config`` dictionary, eventually overriding values.
         """
 
+        if plugins is None:
+            plugins = STANDARD_PLUGINS
+        if config is None:
+            config = {}
+        if plugin_config is None:
+            plugin_config = {}
         self.plugins = plugins
         self.plugin_config = {}
         config = copy.copy(config)
@@ -236,21 +258,20 @@ class Embedder(object):
             self.plugin_config[plugin_name] = copy.copy(config)
             self.plugin_config[plugin_name].update(plugin_config.get(plugin_name, {}))
 
-
     def __call__(self, url, **kw):
         """parse the link and either return the link as is or an embed code in case we found a match
 
         :param url: the url to get the embed code for
         :param **kw: optional keyword arguments overwriting configuration on a by call basis
         """
-        
+
         parts = urlparse.urlparse(url)
 
         for plugin in self.plugins:
             name = plugin.__class__.__name__.lower()
             config = copy.copy(self.plugin_config[name])
             config.update(kw)
-            res = plugin(parts, config = config)
+            res = plugin(parts, config=config)
             if res is not None:
                 return res
 
